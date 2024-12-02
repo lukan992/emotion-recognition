@@ -140,318 +140,294 @@ predictor_landmarks = dlib.shape_predictor(
 )
 
 # Lancer la capture video
+video_path = "rtsp://admin:topmireag309!@10.0.58.166//ISAPI/Streaming/Channels/102"
 video_capture = cv2.VideoCapture(
-    "rtsp://admin:topmireag309!@10.0.58.166//ISAPI/Streaming/Channels/102"
+    video_path
 )
-video_capture = cv2.VideoCapture("asd.mp4")
 print("Используется ли GPU:", tensorflow.config.list_physical_devices("GPU"))
 
 
-async def capture_frames_async(rtsp_url, queue: asyncio.Queue):
-    video_capture = cv2.VideoCapture(rtsp_url)
-    if not video_capture.isOpened():
-        logger.error("Не удалось открыть RTSP поток.")
-        return
+async def process_frames_async():
     while True:
-        ret, frame = video_capture.read()
-        if not ret:
-            logger.warning("Не удалось захватить кадр.")
-            await asyncio.sleep(0.01)
-            continue
-        if not isinstance(frame, np.ndarray):
-            logger.warning(f"Некорректный тип frame: {type(frame)}")
-            await asyncio.sleep(0.01)
-            continue
-        if not queue.full():
-            await queue.put(frame)
-            print("заполнение очереди")
-        if queue.full():
-            print("очередь полная")
-            break
-        await asyncio.sleep(0)
-
-
-async def process_frames_async(queue):
-    while True:
-        frame = cv2.VideoCapture(
-            "rtsp://admin:topmireag309!@10.0.58.166//ISAPI/Streaming/Channels/102"
-        )
-        # Capture frame-by-frame
-        print("считался кадр")
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        rects = face_detect(gray, 1)
-        # gray, detected_faces, coord = detect_face(frame)
-        for i, rect in enumerate(rects):
-            shape = predictor_landmarks(gray, rect)
-            shape = face_utils.shape_to_np(shape)
-
-            # Identify face coordinates
-            (x, y, w, h) = face_utils.rect_to_bb(rect)
-            face = gray[y: y + h, x: x + w]
-
-            # Zoom on extracted face
-            face = zoom(face, (shape_x / face.shape[0],
-                               shape_y / face.shape[1]))
-
-            # Cast type float
-            face = face.astype(np.float32)
-
-            # Scale
-            face /= float(face.max())
-            face = np.reshape(face.flatten(), (1, 48, 48, 1))
-
-            # Make Prediction
-            prediction = model.predict(face)
-            prediction_result = np.argmax(prediction)
-
-            # Rectangle around the face
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-            cv2.putText(
-                frame,
-                "Face #{}".format(i + 1),
-                (x - 10, y - 10),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (0, 255, 0),
-                2,
-            )
-
-            for j, k in shape:
-                cv2.circle(frame, (j, k), 1, (0, 0, 255), -1)
-
-            # 1. Add prediction probabilities
-            cv2.putText(
-                frame,
-                "----------------",
-                (40, 100 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                0,
-            )
-            cv2.putText(
-                frame,
-                "Emotional report : Face #" + str(i + 1),
-                (40, 120 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                0,
-            )
-            cv2.putText(
-                frame,
-                "Angry : " + str(round(prediction[0][0], 3)),
-                (40, 140 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                0,
-            )
-            cv2.putText(
-                frame,
-                "Disgust : " + str(round(prediction[0][1], 3)),
-                (40, 160 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                0,
-            )
-            cv2.putText(
-                frame,
-                "Fear : " + str(round(prediction[0][2], 3)),
-                (40, 180 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                1,
-            )
-            cv2.putText(
-                frame,
-                "Happy : " + str(round(prediction[0][3], 3)),
-                (40, 200 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                1,
-            )
-            cv2.putText(
-                frame,
-                "Sad : " + str(round(prediction[0][4], 3)),
-                (40, 220 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                1,
-            )
-            cv2.putText(
-                frame,
-                "Surprise : " + str(round(prediction[0][5], 3)),
-                (40, 240 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                1,
-            )
-            cv2.putText(
-                frame,
-                "Neutral : " + str(round(prediction[0][6], 3)),
-                (40, 260 + 180 * i),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                155,
-                1,
-            )
-
-            # 2. Annotate main image with a label
-            if prediction_result == 0:
-                cv2.putText(
-                    frame,
-                    "Angry",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            elif prediction_result == 1:
-                cv2.putText(
-                    frame,
-                    "Disgust",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            elif prediction_result == 2:
-                cv2.putText(
-                    frame,
-                    "Fear",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            elif prediction_result == 3:
-                cv2.putText(
-                    frame,
-                    "Happy",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            elif prediction_result == 4:
-                cv2.putText(
-                    frame,
-                    "Sad",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            elif prediction_result == 5:
-                cv2.putText(
-                    frame,
-                    "Surprise",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-            else:
-                cv2.putText(
-                    frame,
-                    "Neutral",
-                    (x + w - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    1,
-                    (0, 255, 0),
-                    2,
-                )
-
-            # 3. Eye Detection and Blink Count
-            leftEye = shape[lStart:lEnd]
-            rightEye = shape[rStart:rEnd]
-
-            # Compute Eye Aspect Ratio
-            # leftEAR = await eye_aspect_ratio(leftEye)
-            # rightEAR = await eye_aspect_ratio(rightEye)
-            # ear = (leftEAR + rightEAR) / 2.0
-
-            # And plot its contours
-            leftEyeHull = cv2.convexHull(leftEye)
-            rightEyeHull = cv2.convexHull(rightEye)
-            cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
-            cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
-
-            # 4. Detect Nose
-            nose = shape[nStart:nEnd]
-            noseHull = cv2.convexHull(nose)
-            cv2.drawContours(frame, [noseHull], -1, (0, 255, 0), 1)
-
-            # 5. Detect Mouth
-            mouth = shape[mStart:mEnd]
-            mouthHull = cv2.convexHull(mouth)
-            cv2.drawContours(frame, [mouthHull], -1, (0, 255, 0), 1)
-
-            # 6. Detect Jaw
-            jaw = shape[jStart:jEnd]
-            jawHull = cv2.convexHull(jaw)
-            cv2.drawContours(frame, [jawHull], -1, (0, 255, 0), 1)
-
-            # 7. Detect Eyebrows
-            ebr = shape[ebrStart:ebrEnd]
-            ebrHull = cv2.convexHull(ebr)
-            cv2.drawContours(frame, [ebrHull], -1, (0, 255, 0), 1)
-            ebl = shape[eblStart:eblEnd]
-            eblHull = cv2.convexHull(ebl)
-            cv2.drawContours(frame, [eblHull], -1, (0, 255, 0), 1)
-
-        cv2.putText(
-            frame,
-            "Number of Faces : " + str(len(rects)),
-            (40, 40),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            155,
-            1,
-        )
-
-        success, jpeg = cv2.imencode(".jpg", frame)
+        print('-----------------')
+        print('начало цикла')
+        print('<<<<<<>>>>>>')
+        success, frame = video_capture.read()
+        print('считывание кадра')
         if success:
-            processed_frame = jpeg.tobytes()
-            print("кадр обрабоотна")
-            yield processed_frame
-            video_capture.release()
-        else:
-            print("не удалось закодировать кадр")
-        await asyncio.sleep(0)
-        if queue.empty():
-            await capture_frames_async(
-                "rtsp://admin:topmireag309!@10.0.58.166//ISAPI/Streaming/Channels/101",
-                queue,
+            # Capture frame-by-frame
+            print("считался кадр")
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            rects = face_detect(gray, 1)
+            print('перобразование кадра в серый и детекция лиц')
+            # gray, detected_faces, coord = detect_face(frame)
+            for i, rect in enumerate(rects):
+                shape = predictor_landmarks(gray, rect)
+                shape = face_utils.shape_to_np(shape)
+
+                # Identify face coordinates
+                (x, y, w, h) = face_utils.rect_to_bb(rect)
+                face = gray[y: y + h, x: x + w]
+
+                # Zoom on extracted face
+                face = zoom(face, (shape_x / face.shape[0],
+                            shape_y / face.shape[1]))
+
+                # Cast type float
+                face = face.astype(np.float32)
+
+                # Scale
+                face /= float(face.max())
+                face = np.reshape(face.flatten(), (1, 48, 48, 1))
+
+                # Make Prediction
+                prediction = model.predict(face)
+                prediction_result = np.argmax(prediction)
+
+                # Rectangle around the face
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+                cv2.putText(
+                    frame[1],
+                    "Face #{}".format(i + 1),
+                    (x - 10, y - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2,
+                )
+
+                for j, k in shape:
+                    cv2.circle(frame, (j, k), 1, (0, 0, 255), -1)
+
+                # 1. Add prediction probabilities
+                cv2.putText(
+                    frame,
+                    "----------------",
+                    (40, 100 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    0,
+                )
+                cv2.putText(
+                    frame,
+                    "Emotional report : Face #" + str(i + 1),
+                    (40, 120 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    0,
+                )
+                cv2.putText(
+                    frame,
+                    "Angry : " + str(round(prediction[0][0], 3)),
+                    (40, 140 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    0,
+                )
+                cv2.putText(
+                    frame,
+                    "Disgust : " + str(round(prediction[0][1], 3)),
+                    (40, 160 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    0,
+                )
+                cv2.putText(
+                    frame,
+                    "Fear : " + str(round(prediction[0][2], 3)),
+                    (40, 180 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    1,
+                )
+                cv2.putText(
+                    frame,
+                    "Happy : " + str(round(prediction[0][3], 3)),
+                    (40, 200 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    1,
+                )
+                cv2.putText(
+                    frame,
+                    "Sad : " + str(round(prediction[0][4], 3)),
+                    (40, 220 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    1,
+                )
+                cv2.putText(
+                    frame,
+                    "Surprise : " + str(round(prediction[0][5], 3)),
+                    (40, 240 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    1,
+                )
+                cv2.putText(
+                    frame,
+                    "Neutral : " + str(round(prediction[0][6], 3)),
+                    (40, 260 + 180 * i),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    155,
+                    1,
+                )
+
+                # 2. Annotate main image with a label
+                if prediction_result == 0:
+                    cv2.putText(
+                        frame,
+                        "Angry",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif prediction_result == 1:
+                    cv2.putText(
+                        frame,
+                        "Disgust",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif prediction_result == 2:
+                    cv2.putText(
+                        frame,
+                        "Fear",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif prediction_result == 3:
+                    cv2.putText(
+                        frame,
+                        "Happy",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif prediction_result == 4:
+                    cv2.putText(
+                        frame,
+                        "Sad",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                elif prediction_result == 5:
+                    cv2.putText(
+                        frame,
+                        "Surprise",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+                else:
+                    cv2.putText(
+                        frame,
+                        "Neutral",
+                        (x + w - 10, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 255, 0),
+                        2,
+                    )
+
+                # 3. Eye Detection and Blink Count
+                leftEye = shape[lStart:lEnd]
+                rightEye = shape[rStart:rEnd]
+
+                # Compute Eye Aspect Ratio
+                # leftEAR = await eye_aspect_ratio(leftEye)
+                # rightEAR = await eye_aspect_ratio(rightEye)
+                # ear = (leftEAR + rightEAR) / 2.0
+
+                # And plot its contours
+                leftEyeHull = cv2.convexHull(leftEye)
+                rightEyeHull = cv2.convexHull(rightEye)
+                cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
+                cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
+
+                # 4. Detect Nose
+                nose = shape[nStart:nEnd]
+                noseHull = cv2.convexHull(nose)
+                cv2.drawContours(frame, [noseHull], -1, (0, 255, 0), 1)
+
+                # 5. Detect Mouth
+                mouth = shape[mStart:mEnd]
+                mouthHull = cv2.convexHull(mouth)
+                cv2.drawContours(frame, [mouthHull], -1, (0, 255, 0), 1)
+
+                # 6. Detect Jaw
+                jaw = shape[jStart:jEnd]
+                jawHull = cv2.convexHull(jaw)
+                cv2.drawContours(frame, [jawHull], -1, (0, 255, 0), 1)
+
+                # 7. Detect Eyebrows
+                ebr = shape[ebrStart:ebrEnd]
+                ebrHull = cv2.convexHull(ebr)
+                cv2.drawContours(frame, [ebrHull], -1, (0, 255, 0), 1)
+                ebl = shape[eblStart:eblEnd]
+                eblHull = cv2.convexHull(ebl)
+                cv2.drawContours(frame, [eblHull], -1, (0, 255, 0), 1)
+
+            cv2.putText(
+                frame,
+                "Number of Faces : " + str(len(rects)),
+                (40, 40),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                155,
+                1,
             )
 
+            success, jpeg = cv2.imencode(".jpg", frame)
+            if success:
+                processed_frame = jpeg.tobytes()
+                print("кадр обработан")
+                yield processed_frame
+                print('кадр отправлен')
+                video_capture.release()
+            else:
+                print("не удалось закодировать кадр")
+            await asyncio.sleep(0)
+            print('конец цикла')
+        else:
+            print('неудалось считать кадр')
+            break
 
-async def start():
-    queue = asyncio.Queue(maxsize=1)
-    await capture_frames_async(
-        "rtsp://admin:topmireag309!@10.0.58.166//ISAPI/Streaming/Channels/101",
-        queue
-    )
-    return queue
+
+# async def start(queue):
+#     await process_frames_async(queue)
+#     queue = await queue.get()
+#     yield queue
 
 
 async def main():
-    queue = await start()
-    async for frame in process_frames_async(queue):
-            print()
+    async for frame in process_frames_async():
+        print()
 
 
 if __name__ == "__main__":
